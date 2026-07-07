@@ -1,0 +1,88 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Python environments and caches
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+
+# Python tooling output
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.hypothesis/
+
+# Application runtime data
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+*.sqlite-shm
+*.sqlite-wal
+celerybeat-schedule
+celerybeat-schedule.*
+
+# Logs and process files
+*.log
+logs/
+*.pid
+*.pid.lock
+
+# Frontend dependencies and build output
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+build/
+frontend/build/
+.vite/
+frontend/.vite/
+frontend/.vite-temp/
+frontend/node_modules/.vite/
+frontend/node_modules/.vite-temp/
+
+# Package-manager local caches
+.npm/
+.pnpm-store/
+.yarn/
+!.yarn/releases/
+!.yarn/plugins/
+!.yarn/sdks/
+!.yarn/versions/
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Local agent/tooling state
+.codex/
+.agents/
+
+# Markdown
+AGENTS.md
+PLANS.md

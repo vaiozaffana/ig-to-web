@@ -1,0 +1,46 @@
+[project]
+name = "ig-automation"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "agno>=2.6.20",
+    "aiosqlite>=0.22.1",
+    "alembic>=1.18.5",
+    "celery>=5.6.3",
+    "fastapi[standard]>=0.139.0",
+    "greenlet>=3.5.3",
+    "httpx>=0.28.1",
+    "openai>=2.44.0",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.2",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "redis>=8.0.1",
+    "ruff>=0.14.8",
+    "scalar-fastapi>=1.8.2",
+    "sqlmodel>=0.0.39",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.mypy]
+python_version = "3.13"
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+strict_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
