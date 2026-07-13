@@ -8,13 +8,19 @@ from app.models.agent_run import AgentRun
 from app.models.article_draft import ArticleDraft
 from app.models.article_review import ArticleReview
 from app.models.engine import engine
-from app.models.enums import NotificationStatus, PublishLogStatus, WorkflowStatus
+from app.models.enums import (
+    NotificationChannel,
+    NotificationStatus,
+    PublishLogStatus,
+    WorkflowStatus,
+)
 from app.models.instagram_post import InstagramPost
 from app.models.notification import Notification
 from app.models.publish_log import PublishLog
 from app.modules.adapters import instagram as instagram_adapter
 from app.modules.adapters import llm as llm_adapter
 from app.modules.adapters import notification as notification_adapter
+from app.modules.adapters.notification import normalize_whatsapp_phone_number
 from app.modules.schemas.article_draft_schema import (
     ArticleDraftOutput,
     GenerateDraftTaskPayload,
@@ -300,13 +306,52 @@ def test_invalid_llm_output_marks_generation_failed(monkeypatch) -> None:
     assert run.error_message is not None
 
 
-def test_notification_failure_marks_draft(monkeypatch, client, admin_headers) -> None:
-    client.post("/admin/sync-instagram", headers=admin_headers)
+def _create_reviewable_draft_for_notification() -> None:
+    with Session(engine) as session:
+        post = create_instagram_post_if_new(
+            session,
+            InstagramPostPayload(
+                instagram_media_id="notify-post",
+                permalink="https://instagram.com/p/notify-post",
+                caption="Kegiatan sekolah.",
+                hashtags=["sekolah"],
+                media_url="https://example.com/image.jpg",
+                media_type="image",
+                posted_at=datetime.now(UTC),
+            ),
+        )
+        assert post is not None
+        session.add(
+            ArticleDraft(
+                instagram_post_id=post.id or 0,
+                title="Kegiatan Sekolah",
+                slug="kegiatan-sekolah",
+                summary="Kegiatan sekolah siap direview.",
+                content_markdown="# Kegiatan Sekolah\n\nKegiatan sekolah siap direview.",
+                content_html="<h1>Kegiatan Sekolah</h1>",
+                meta_title="Kegiatan Sekolah",
+                meta_description="Kegiatan sekolah siap direview.",
+                category="Berita Sekolah",
+                tags=["sekolah"],
+                image_alt_text="Kegiatan sekolah",
+                source_instagram_url="https://instagram.com/p/notify-post",
+                status=WorkflowStatus.WAITING_REVIEW,
+            )
+        )
+        session.commit()
 
-    def fail_send(_recipient: str, _message: str) -> dict[str, object]:
+
+def test_notification_failure_marks_draft(monkeypatch) -> None:
+    _create_reviewable_draft_for_notification()
+
+    def fail_whatsapp(_recipient: str, _message: str) -> dict[str, object]:
+        raise RuntimeError("whatsapp down")
+
+    def fail_telegram(_recipient: str, _message: str) -> dict[str, object]:
         raise RuntimeError("telegram down")
 
-    monkeypatch.setattr(notification_adapter.telegram_client, "send_message", fail_send)
+    monkeypatch.setattr(notification_adapter.whatsapp_client, "send_message", fail_whatsapp)
+    monkeypatch.setattr(notification_adapter.telegram_client, "send_message", fail_telegram)
     with pytest.raises(RuntimeError):
         send_review_notification({"article_draft_id": 1})
 
@@ -314,11 +359,53 @@ def test_notification_failure_marks_draft(monkeypatch, client, admin_headers) ->
         draft = session.get(ArticleDraft, 1)
         failed = session.exec(
             select(Notification).where(Notification.status == NotificationStatus.FAILED)
-        ).one()
+        ).all()
 
     assert draft is not None
     assert draft.status == WorkflowStatus.NOTIFICATION_FAILED
-    assert failed.error_message == "telegram down"
+    assert {notification.channel for notification in failed} == {
+        NotificationChannel.WHATSAPP,
+        NotificationChannel.TELEGRAM,
+    }
+
+
+@pytest.mark.parametrize(
+    ("raw_phone", "normalized"),
+    [
+        ("+6281234567890", "6281234567890"),
+        ("081234567890", "6281234567890"),
+        ("81234567890", "6281234567890"),
+        ("+62 812-3456-7890", "6281234567890"),
+    ],
+)
+def test_whatsapp_admin_phone_number_formats_are_normalized(
+    raw_phone: str,
+    normalized: str,
+) -> None:
+    assert normalize_whatsapp_phone_number(raw_phone) == normalized
+
+
+def test_whatsapp_failure_falls_back_to_telegram(monkeypatch) -> None:
+    _create_reviewable_draft_for_notification()
+
+    def fail_whatsapp(_recipient: str, _message: str) -> dict[str, object]:
+        raise RuntimeError("whatsapp down")
+
+    monkeypatch.setattr(notification_adapter.whatsapp_client, "send_message", fail_whatsapp)
+
+    result = send_review_notification({"article_draft_id": 1})
+
+    with Session(engine) as session:
+        draft = session.get(ArticleDraft, 1)
+        notifications = session.exec(select(Notification)).all()
+
+    assert result["channel"] == NotificationChannel.TELEGRAM
+    assert draft is not None
+    assert draft.status == WorkflowStatus.WAITING_REVIEW
+    assert [notification.status for notification in notifications[-2:]] == [
+        NotificationStatus.FAILED,
+        NotificationStatus.SENT,
+    ]
 
 
 def test_retry_uses_existing_row_ids_and_honors_max_retries(monkeypatch) -> None:

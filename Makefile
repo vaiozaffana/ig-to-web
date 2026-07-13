@@ -13,11 +13,41 @@ docker-up:
 docker-worker:
 	docker compose up worker
 
-frontend-dev:
-	cd frontend && npm run dev -- --host 0.0.0.0
+# Test commands
+test-whatsapp:
+	docker compose exec api python scripts/test_whatsapp.py
 
-frontend-build:
-	cd frontend && npm run build
+test-whatsapp-baileys:
+	uv run python scripts/test_whatsapp_baileys.py
 
-frontend-lint:
-	cd frontend && npm run lint
+test-whatsapp-groups:
+	uv run python scripts/test_whatsapp_groups.py
+
+test-notification:
+	docker compose exec api python scripts/test_notification_fallback.py
+
+test-webhook:
+	uv run python scripts/test_webhook.py
+
+debug-whatsapp:
+	uv run python scripts/debug_whatsapp.py
+
+preview-notification:
+	uv run python scripts/preview_notification_template.py
+
+# Ngrok webhook commands
+ngrok-url:
+	uv run python scripts/get_ngrok_url.py
+
+ngrok-logs:
+	docker compose logs -f ngrok
+
+# Frontend commands
+fe-dev:
+	cd frontend && bun dev -- --host 0.0.0.0
+
+fe-build:
+	cd frontend && bun run build
+
+fe-lint:
+	cd frontend && bun run lint

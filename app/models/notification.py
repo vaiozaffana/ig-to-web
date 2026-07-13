@@ -10,7 +10,7 @@ class Notification(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     article_draft_id: int = Field(foreign_key="article_drafts.id", index=True)
-    channel: NotificationChannel = NotificationChannel.TELEGRAM
+    channel: NotificationChannel = NotificationChannel.WHATSAPP
     recipient: str
     message: str
     status: NotificationStatus = Field(default=NotificationStatus.PENDING, index=True)

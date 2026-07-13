@@ -112,12 +112,18 @@ def _media_items_from_post(post: InstagramPost) -> list[InstagramMediaItem]:
 
 
 def sync_instagram_posts(session: Session, account_id: str, limit: int) -> SyncResponse:
+    # Get username dari Instagram
+    from app.modules.adapters.instagram import instagram_client
+    
+    status = instagram_client.validate_credentials(account_id)
+    username = status.username or account_id  # Fallback ke account_id jika username tidak ada
+    
     fetched_posts = instagram_client.fetch_recent_posts(account_id=account_id, limit=limit)
     created = 0
     skipped = 0
     enqueued = 0
     for payload in fetched_posts:
-        post = create_instagram_post_if_new(session, payload)
+        post = create_instagram_post_if_new(session, payload, username=username)
         if post is None:
             skipped += 1
             continue
@@ -136,12 +142,13 @@ def sync_instagram_posts(session: Session, account_id: str, limit: int) -> SyncR
 def create_instagram_post_if_new(
     session: Session,
     payload: InstagramPostPayload,
+    username: str | None = None,
 ) -> InstagramPost | None:
     existing = session.exec(
         select(InstagramPost).where(InstagramPost.instagram_media_id == payload.instagram_media_id)
     ).first()
     if existing is not None:
-        _refresh_instagram_post_media(existing, payload)
+        _refresh_instagram_post_media(existing, payload, username)
         session.add(existing)
         session.commit()
         return None
@@ -153,6 +160,7 @@ def create_instagram_post_if_new(
         hashtags=payload.hashtags,
         media_url=payload.media_url,
         media_type=payload.media_type,
+        username=username,
         posted_at=payload.posted_at,
         raw_payload_json=_raw_payload_with_media_items(payload),
         max_retries=settings.task_max_retries,
@@ -179,6 +187,7 @@ def _raw_payload_with_media_items(payload: InstagramPostPayload) -> dict[str, An
 def _refresh_instagram_post_media(
     post: InstagramPost,
     payload: InstagramPostPayload,
+    username: str | None = None,
 ) -> None:
     post.permalink = payload.permalink
     post.caption = payload.caption
@@ -186,6 +195,8 @@ def _refresh_instagram_post_media(
     post.media_url = payload.media_url
     post.media_type = payload.media_type
     post.posted_at = payload.posted_at
+    if username:
+        post.username = username
     post.raw_payload_json = _raw_payload_with_media_items(payload)
     post.updated_at = utcnow()
 

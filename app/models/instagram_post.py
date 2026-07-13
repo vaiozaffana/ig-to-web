@@ -18,6 +18,7 @@ class InstagramPost(SQLModel, table=True):
     media_url: str = ""
     media_type: str = "image"
     local_media_url: str | None = None
+    username: str | None = None  # Username Instagram author
     posted_at: datetime
     fetched_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     status: WorkflowStatus = Field(default=WorkflowStatus.INSTAGRAM_COLLECTED, index=True)

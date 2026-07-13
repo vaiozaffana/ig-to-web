@@ -32,6 +32,7 @@ class AgentRunStatus(StrEnum):
 
 
 class NotificationChannel(StrEnum):
+    WHATSAPP = "whatsapp"
     TELEGRAM = "telegram"
 
 

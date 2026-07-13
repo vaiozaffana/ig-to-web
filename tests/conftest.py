@@ -14,7 +14,7 @@ from app.models import (
 )
 from app.models.engine import engine, init_db
 from app.modules.adapters.instagram import instagram_client
-from app.modules.adapters.notification import telegram_client
+from app.modules.adapters.notification import telegram_client, whatsapp_client
 from app.modules.schemas.article_draft_schema import InstagramMediaItem, InstagramPostPayload
 from app.modules.tasks.celery_app import celery_app
 
@@ -50,6 +50,16 @@ def clean_db(monkeypatch: pytest.MonkeyPatch) -> None:
     celery_app.conf.task_always_eager = True
     celery_app.conf.task_eager_propagates = True
     monkeypatch.setattr(instagram_client, "fetch_recent_posts", _fake_instagram_posts)
+    monkeypatch.setattr(
+        whatsapp_client,
+        "send_message",
+        lambda recipient, message: {
+            "ok": True,
+            "mock": True,
+            "recipient": recipient,
+            "message": message,
+        },
+    )
     monkeypatch.setattr(
         telegram_client,
         "send_message",

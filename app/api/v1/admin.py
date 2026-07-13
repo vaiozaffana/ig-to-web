@@ -8,6 +8,7 @@ from app.core.settings import settings
 from app.models.enums import WorkflowStatus
 from app.models.session import get_session
 from app.modules.adapters.instagram import instagram_client
+from app.modules.adapters.notification import whatsapp_client
 from app.modules.schemas.article_draft_schema import (
     AdminActionResponse,
     ArticleDraftDetail,
@@ -165,3 +166,55 @@ def enqueue_sync_instagram() -> dict[str, object]:
     )
     task = scheduled_fetch_instagram_posts.delay(payload.model_dump(mode="json"))
     return {"task_id": task.id, "status": "queued"}
+
+
+@router.get("/whatsapp/status")
+def get_whatsapp_status() -> dict[str, object]:
+    """Check status koneksi WhatsApp Baileys."""
+    is_connected = whatsapp_client.is_connected()
+    return {
+        "connected": is_connected,
+        "service_url": settings.whatsapp_service_url,
+        "message": "Connected" if is_connected else "Not connected. Scan QR code via /admin/whatsapp/qr"
+    }
+
+
+@router.get("/whatsapp/qr")
+def get_whatsapp_qr() -> dict[str, object]:
+    """Dapatkan QR code untuk pairing WhatsApp (jika belum connected)."""
+    if whatsapp_client.is_connected():
+        return {"status": "already_connected", "message": "WhatsApp sudah terkoneksi"}
+    
+    qr_code = whatsapp_client.get_qr_code()
+    
+    if not qr_code:
+        return {
+            "status": "no_qr_available",
+            "message": "QR code tidak tersedia. Restart WhatsApp service atau tunggu beberapa detik."
+        }
+    
+    return {
+        "status": "qr_available",
+        "qr": qr_code,
+        "message": "Scan QR code dengan WhatsApp di HP Anda: Settings → Linked Devices → Link a Device"
+    }
+
+
+@router.get("/whatsapp/groups")
+def get_whatsapp_groups() -> dict[str, object]:
+    """Dapatkan list group WhatsApp yang terhubung."""
+    if not whatsapp_client.is_connected():
+        return {
+            "status": "not_connected",
+            "message": "WhatsApp belum terkoneksi. Scan QR code terlebih dahulu.",
+            "groups": []
+        }
+    
+    groups = whatsapp_client.list_groups()
+    
+    return {
+        "status": "ok",
+        "count": len(groups),
+        "groups": groups,
+        "message": f"Found {len(groups)} groups. Salin 'id' group yang diinginkan ke WHATSAPP_GROUP_ID"
+    }

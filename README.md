@@ -23,7 +23,7 @@ Prinsip utama sistem:
 - Pydantic v2
 - Ruff, mypy, pytest
 
-## Quick Start Dengan Docker
+## Setup Pertama Kali
 
 1. Buat file env:
 
@@ -31,22 +31,72 @@ Prinsip utama sistem:
 cp .env.example .env
 ```
 
-2. Ubah minimal:
+2. Isi minimal secret dan credential di `.env`:
 
 ```env
 ADMIN_API_KEY=change-this
+INSTAGRAM_ACCESS_TOKEN=
+INSTAGRAM_ACCOUNT_ID=
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_ADMIN_PHONE=
 ```
 
-3. Jalankan stack:
+3. Pilih mode run:
+
+- Docker: paling praktis untuk menjalankan API, Redis, worker, dan beat sekaligus.
+- Lokal: cocok saat debugging Python/frontend dengan proses terpisah.
+
+## Menjalankan Dengan Docker
+
+Gunakan ini saat membuka project yang sudah pernah disetup.
+
+```bash
+docker compose up
+```
+
+Jika image belum pernah dibuat atau dependency berubah:
 
 ```bash
 docker compose up --build
 ```
 
-Service yang berjalan:
+Jalankan di background:
+
+```bash
+docker compose up -d
+```
+
+Cek status service:
+
+```bash
+docker compose ps
+```
+
+Lihat log:
+
+```bash
+docker compose logs -f api
+docker compose logs -f worker
+docker compose logs -f beat
+```
+
+Restart setelah mengubah `.env`:
+
+```bash
+docker compose up -d --no-build --force-recreate api worker beat
+```
+
+Matikan stack:
+
+```bash
+docker compose down
+```
+
+Service Docker:
 
 - API: `http://localhost:8000`
-- Redis: `localhost:6379`
+- Redis: internal Compose service `redis:6379`
 - Celery worker
 - Celery beat
 - SQLite volume: `sqlite-data`
@@ -60,21 +110,17 @@ uv run alembic upgrade head
 Docker memakai virtualenv internal di `/opt/venv`. Jangan bind-mount atau copy `.venv`
 host ke container, karena permission dan symlink Python host/container berbeda.
 
-## Quick Start Lokal
+## Menjalankan Lokal
 
-1. Install dependency:
+Gunakan ini jika ingin menjalankan proses backend secara terpisah di host.
+
+Setup dependency sekali:
 
 ```bash
 uv sync
 ```
 
-2. Buat `.env`:
-
-```bash
-cp .env.example .env
-```
-
-Untuk local non-Docker, gunakan Redis lokal:
+Untuk local non-Docker, pastikan `.env` memakai Redis lokal:
 
 ```env
 REDIS_URL=redis://localhost:6379/0
@@ -84,41 +130,294 @@ DATABASE_URL=sqlite:///./data/ig_automation.db
 Di Docker Compose, `REDIS_URL` otomatis di-override menjadi `redis://redis:6379/0`
 karena hostname `redis` hanya valid di network Compose.
 
-3. Apply migration:
+Apply migration setelah pull perubahan schema:
 
 ```bash
 uv run alembic upgrade head
 ```
 
-4. Jalankan API:
+Terminal 1, jalankan Redis. Bisa pakai Docker untuk Redis saja:
+
+```bash
+docker compose up -d redis
+```
+
+Terminal 2, jalankan API:
+
+```bash
+make dev
+```
+
+atau:
 
 ```bash
 uv run fastapi run app/main.py --host 0.0.0.0 --port 8000
 ```
 
-5. Jalankan worker:
+Terminal 3, jalankan worker:
 
 ```bash
-uv run celery -A app.modules.tasks.celery_app.celery_app worker --loglevel=INFO --concurrency=1
-```
-
-6. Jalankan beat:
-
-```bash
-uv run celery -A app.modules.tasks.beat_schedule.celery_app beat --loglevel=INFO
-```
-
-Shortcut Makefile:
-
-```bash
-make dev
 make worker
-make beat
-make docker-up
-make docker-worker
 ```
 
-## Environment Variables
+Terminal 4, jalankan beat:
+
+```bash
+make beat
+```
+
+## Menjalankan Frontend
+
+Frontend ada di `frontend/` dan memakai proxy `/api` ke backend `http://127.0.0.1:8000`.
+
+Install dependency frontend sekali:
+
+```bash
+cd frontend
+bun install
+```
+
+Jalankan dev server:
+
+```bash
+make fe-dev
+```
+
+atau:
+
+```bash
+cd frontend
+bun dev
+```
+
+Default URL frontend: `http://localhost:5173`.
+
+Jika backend berjalan di URL lain, set target proxy saat menjalankan frontend:
+
+```bash
+cd frontend
+VITE_API_TARGET=http://127.0.0.1:8000 bun dev
+```
+
+## Smoke Check Setelah Project Dibuka
+
+Setelah Docker atau local process berjalan, cek:
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/worker/status
+```
+
+Cek credential Instagram:
+
+```bash
+curl http://localhost:8000/admin/integrations/instagram/status \
+  -H "X-Admin-API-Key: <ADMIN_API_KEY>"
+```
+
+Trigger sync manual:
+
+```bash
+curl -X POST http://localhost:8000/admin/sync-instagram/task \
+  -H "X-Admin-API-Key: <ADMIN_API_KEY>"
+```
+
+## Setup Webhook WhatsApp (Optional)
+
+**NOTE: Webhook hanya diperlukan jika menggunakan Meta WhatsApp Cloud API. Untuk Baileys (default), webhook tidak diperlukan.**
+
+WhatsApp Business API memerlukan webhook untuk menerima status updates (sent, delivered, read, failed). Setup webhook diperlukan untuk production tapi opsional untuk development.
+
+### Prasyarat
+
+1. **Ngrok Account** (gratis): Signup di https://ngrok.com
+2. **Ngrok Authtoken**: Dapatkan dari https://dashboard.ngrok.com/get-started/your-authtoken
+3. **Verify Token**: Buat string random (bisa pakai `uuidgen` atau generator lain)
+
+### Setup Steps
+
+1. Tambahkan credentials ke `.env`:
+
+```env
+WHATSAPP_VERIFY_TOKEN=your-random-verify-token-here
+NGROK_AUTHTOKEN=your-ngrok-authtoken-here
+```
+
+2. Start semua services termasuk ngrok:
+
+```bash
+docker compose up -d
+```
+
+3. Dapatkan public webhook URL:
+
+```bash
+make ngrok-url
+```
+
+Output akan memberikan URL webhook dan instruksi setup lengkap.
+
+4. Setup di Meta for Developers:
+
+- Buka https://developers.facebook.com/
+- Pilih app → WhatsApp → Configuration
+- Di bagian "Webhook", klik "Edit"
+- Masukkan:
+  - **Callback URL**: `https://xxxx.ngrok-free.app/api/webhooks/whatsapp` (dari `make ngrok-url`)
+  - **Verify token**: Nilai `WHATSAPP_VERIFY_TOKEN` dari `.env` Anda
+- Klik "Verify and Save"
+- Subscribe ke field: `messages`
+
+5. Monitor webhook requests:
+
+```bash
+# Lihat ngrok web interface
+open http://localhost:4040
+
+# Atau lihat logs
+make ngrok-logs
+```
+
+### Verify Webhook
+
+Test webhook verification secara manual:
+
+```bash
+curl "http://localhost:8000/api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=your-token&hub.challenge=test123"
+```
+
+Response harus return `test123` jika token cocok.
+
+## Setup WhatsApp dengan Baileys
+
+Sistem menggunakan **Baileys** (WhatsApp Web API) yang tidak memerlukan Meta Business account atau verifikasi. Anda cukup scan QR code seperti WhatsApp Web.
+
+### Keuntungan Baileys vs Meta Cloud API
+
+| Fitur | Baileys | Meta Cloud API |
+|---|---|---|
+| Setup | Scan QR code saja | Perlu Meta Business, verifikasi, webhook |
+| Biaya | Gratis | Gratis untuk volume rendah |
+| Batasan | Rate limit WhatsApp Web | Rate limit official API |
+| Test recipients | Bisa kirim ke nomor apa saja | Perlu daftar test recipients |
+
+### Langkah Setup
+
+1. **Start semua services:**
+
+```bash
+docker compose up -d
+```
+
+2. **Cek status WhatsApp:**
+
+```bash
+curl http://localhost:8000/admin/whatsapp/status \
+  -H "X-Admin-API-Key: <ADMIN_API_KEY>"
+```
+
+3. **Jika belum connected, dapatkan QR code:**
+
+```bash
+curl http://localhost:8000/admin/whatsapp/qr \
+  -H "X-Admin-API-Key: <ADMIN_API_KEY>"
+```
+
+4. **Scan QR code dengan WhatsApp:**
+   - Buka WhatsApp di HP
+   - Tap menu (⋮) → **Linked Devices**
+   - Tap **Link a Device**
+   - Scan QR code yang muncul dari response API di atas
+
+5. **Verify connection & test:**
+
+```bash
+# Cek status
+curl http://localhost:8000/admin/whatsapp/status \
+  -H "X-Admin-API-Key: <ADMIN_API_KEY>"
+
+# Test kirim pesan (via script)
+make test-whatsapp-baileys
+```
+
+### Troubleshooting Baileys
+
+**Service tidak bisa diakses:**
+```bash
+# Cek status service
+docker compose ps whatsapp
+
+# Cek logs
+docker compose logs whatsapp -f
+
+# Restart jika perlu
+docker compose restart whatsapp
+```
+
+**QR Code tidak muncul:**
+- Tunggu 10-30 detik setelah service start
+- Jika masih tidak muncul, restart: `docker compose restart whatsapp`
+
+**Connection lost setelah scan:**
+- Baileys akan auto-reconnect
+- Session disimpan di volume `whatsapp-auth`
+- Tidak perlu scan ulang kecuali logout manual
+
+**Pesan tidak terkirim:**
+- Pastikan `WHATSAPP_ADMIN_PHONE` benar di `.env`
+- Format yang valid: `+628979755323` atau `628979755323`
+- **PENTING**: Nomor pengirim (yang scan QR) harus BERBEDA dari `WHATSAPP_ADMIN_PHONE`
+- WhatsApp tidak bisa kirim pesan ke diri sendiri!
+- Debug: `uv run python scripts/debug_whatsapp.py`
+- Cek logs: `docker compose logs whatsapp worker`
+
+### Mode Notifikasi: Private vs Group
+
+Sistem mendukung 2 mode notifikasi:
+
+**Mode 1: Private Chat (Default)**
+- Notifikasi dikirim ke nomor WhatsApp personal
+- Set `WHATSAPP_NOTIFICATION_MODE=private` di `.env`
+- Gunakan `WHATSAPP_ADMIN_PHONE=628979755323`
+
+**Mode 2: Group Chat**
+- Notifikasi dikirim ke group WhatsApp
+- Set `WHATSAPP_NOTIFICATION_MODE=group` di `.env`
+- Gunakan `WHATSAPP_GROUP_ID=120363XXXXX@g.us`
+
+**Cara Mendapatkan Group ID:**
+
+```bash
+# 1. List semua group yang terhubung
+curl http://localhost:8000/admin/whatsapp/groups \
+  -H "X-Admin-API-Key: <ADMIN_API_KEY>"
+
+# Atau via script
+make test-whatsapp-groups
+
+# 2. Salin 'id' group yang diinginkan
+# Contoh: 120363298126068720@g.us
+
+# 3. Set di .env
+WHATSAPP_GROUP_ID=120363298126068720@g.us
+WHATSAPP_NOTIFICATION_MODE=group
+
+# 4. Restart services
+docker compose restart api worker beat
+```
+
+**Tips:**
+- Pastikan akun WhatsApp yang di-scan adalah member dari group target
+- Group ID format: `120363XXXXX@g.us`
+- Bisa switch mode kapan saja dengan update `.env` dan restart services
+- Debug: `uv run python scripts/debug_whatsapp.py`
+- Cek logs: `docker compose logs whatsapp worker`
+
+## Setup Webhook WhatsApp (Optional)
+
+**NOTE: Webhook hanya diperlukan jika menggunakan Meta WhatsApp Cloud API. Untuk Baileys (default), webhook tidak diperlukan.**
+
+WhatsApp Business API memerlukan webhook untuk menerima status updates (sent, delivered, read, failed). Setup webhook diperlukan untuk production tapi opsional untuk development.
 
 | Variable | Fungsi |
 |---|---|
@@ -129,8 +428,10 @@ make docker-worker
 | `INSTAGRAM_ACCOUNT_ID` | ID akun Instagram yang dipantau. |
 | `INSTAGRAM_LIMIT` | Jumlah post yang di-fetch per sync. |
 | `USE_FAKE_INSTAGRAM` | Set `true` hanya untuk local demo tanpa credential. Default `false`. |
-| `TELEGRAM_BOT_TOKEN` | Token Telegram Bot. Jika kosong, notification adapter mode mock. |
-| `TELEGRAM_ADMIN_CHAT_ID` | Chat ID admin penerima notifikasi. |
+| `WHATSAPP_SERVICE_URL` | URL Baileys WhatsApp service. Default `http://localhost:3001`. Di Docker: `http://whatsapp:3001`. |
+| `WHATSAPP_ADMIN_PHONE` | Nomor WhatsApp admin penerima. Format: `+628979755323` atau `628979755323`. |
+| `TELEGRAM_BOT_TOKEN` | Token Telegram Bot. Dipakai sebagai fallback jika WhatsApp gagal/tidak dikonfigurasi. |
+| `TELEGRAM_ADMIN_CHAT_ID` | Chat ID admin penerima notifikasi fallback Telegram. |
 | `OPENAI_API_KEY` | API key LLM provider. |
 | `OPENAI_API_BASE` | Base URL LLM gateway/OpenAI-compatible endpoint. |
 | `MODEL` | Model LLM yang dipakai adapter. |
@@ -188,6 +489,62 @@ Publish draft yang sudah approved:
 ```bash
 curl -X POST http://localhost:8000/admin/articles/drafts/1/publish \
   -H "X-Admin-API-Key: change-this"
+```
+
+## Template Notifikasi
+
+Sistem mengirim notifikasi WhatsApp dengan template yang menarik dan persuasif saat artikel siap direview.
+
+### Format Template
+
+Template menggunakan gaya redaksi berita dengan elemen:
+- ✨ Emoji menarik (variasi berdasarkan artikel)
+- 📰 Judul artikel yang eye-catching
+- 📅 Timestamp posting Instagram
+- 👤 Username Instagram author
+- 📁 Kategori artikel
+- 🎬 Call-to-action yang jelas
+- ⚡ Aksi review yang tersedia
+
+### Preview Template
+
+Lihat preview template sebelum deploy:
+
+```bash
+make preview-notification
+```
+
+Atau manual:
+
+```bash
+uv run python scripts/preview_notification_template.py
+```
+
+### Contoh Output
+
+```
+🎯 *ARTIKEL BARU SIAP TAYANG!* 🎯
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+📰 *Kegiatan Ekstrakurikuler Robotik Juara 1 Tingkat Nasional*
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+📅 13 July 2026, 14:30 WIB
+👤 @smkn1jakarta
+📁 Prestasi
+
+🎬 *Konten fresh dari Instagram sudah kami olah jadi artikel menarik!*
+
+Yuk, cek dulu sebelum dipublikasikan:
+👉 http://localhost:8000/admin/articles/drafts/1
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ *AKSI CEPAT:*
+✅ Approve → Publish
+✏️ Edit → Revisi konten
+❌ Reject → Buang draft
+
+_Konten berkualitas dimulai dari review yang teliti!_ 🎯
 ```
 
 ## Observability
@@ -298,6 +655,45 @@ Mode ini cocok untuk regression test dan local smoke test. Integrasi production 
 credential Instagram, Telegram, dan adapter publish target website yang sebenarnya.
 
 ## Troubleshooting
+
+### WhatsApp Notification Issues
+
+**Error: "Account not registered" (#133010)**
+
+Nomor penerima WhatsApp belum terdaftar sebagai test recipient atau business belum verified.
+
+Solusi untuk development:
+1. Buka [Meta for Developers](https://developers.facebook.com/)
+2. Pilih app → WhatsApp → API Setup
+3. Di bagian "Send and receive messages", klik "Add phone number"
+4. Masukkan nomor tujuan (e.g., `+628979755323`) dan verify via OTP
+
+Untuk production: Business account perlu verified oleh Meta untuk mengirim ke nomor arbitrary.
+
+**Error: "Object with ID 'xxx' does not exist" (code 100, subcode 33)**
+
+Phone Number ID tidak valid atau tidak punya permission.
+
+Solusi:
+1. Verify Phone Number ID di WhatsApp → API Setup → "From" section
+2. Generate new access token jika expired
+3. Pastikan token punya permission: `whatsapp_business_messaging` dan `whatsapp_business_management`
+
+**Test WhatsApp Configuration**
+
+Setelah update `.env`, restart services dan test:
+
+```bash
+docker compose restart api worker beat
+sleep 5
+docker compose exec api python scripts/test_whatsapp.py
+```
+
+**Fallback Mechanism**
+
+Sistem otomatis fallback ke Telegram jika WhatsApp gagal. Pastikan `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_ADMIN_CHAT_ID` terkonfigurasi dengan benar untuk backup notification channel.
+
+### Docker & Virtualenv Issues
 
 Jika muncul error seperti ini setelah menjalankan Docker:
 

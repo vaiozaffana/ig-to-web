@@ -2,6 +2,19 @@ services:
   redis:
     image: redis:8-alpine
 
+  whatsapp:
+    build: ./whatsapp-service
+    ports:
+      - "3001:3001"
+    volumes:
+      - whatsapp-auth:/app/auth_info_baileys
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   api:
     build: .
     command: sh -c "uv run python -m app.scripts.ensure_migrations && uv run alembic upgrade head && uv run fastapi run app/main.py --host 0.0.0.0 --port 8000"
@@ -10,6 +23,7 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: sqlite:///./data/ig_automation.db
+      WHATSAPP_SERVICE_URL: http://whatsapp:3001
       UV_PROJECT_ENVIRONMENT: /opt/venv
       UV_LINK_MODE: copy
     volumes:
@@ -19,6 +33,7 @@ services:
       - "8000:8000"
     depends_on:
       - redis
+      - whatsapp
 
   worker:
     build: .
@@ -28,6 +43,7 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: sqlite:///./data/ig_automation.db
+      WHATSAPP_SERVICE_URL: http://whatsapp:3001
       UV_PROJECT_ENVIRONMENT: /opt/venv
       UV_LINK_MODE: copy
     volumes:
@@ -35,6 +51,7 @@ services:
       - sqlite-data:/app/data
     depends_on:
       - redis
+      - whatsapp
 
   beat:
     build: .
@@ -44,6 +61,7 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: sqlite:///./data/ig_automation.db
+      WHATSAPP_SERVICE_URL: http://whatsapp:3001
       UV_PROJECT_ENVIRONMENT: /opt/venv
       UV_LINK_MODE: copy
     volumes:
@@ -52,5 +70,16 @@ services:
     depends_on:
       - redis
 
+  ngrok:
+    image: ngrok/ngrok:alpine
+    command: http api:8000
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    ports:
+      - "4040:4040"  # ngrok web interface
+    depends_on:
+      - api
+
 volumes:
   sqlite-data:
+  whatsapp-auth:

@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_admin_chat_id: str = ""
 
+    # WhatsApp via Baileys (WhatsApp Web API) - tidak perlu Meta credentials
+    whatsapp_service_url: str = "http://localhost:3001"
+    whatsapp_admin_phone: str = ""  # Format: +628979755323 atau 628979755323 untuk private
+    whatsapp_group_id: str = ""  # Format: 120363XXXXX@g.us untuk group
+    whatsapp_notification_mode: str = "private"  # "private" atau "group"
+
     model: str = "gpt-4.1-mini"
     openai_api_key: str = ""
     openai_api_base: str = "https://api.openai.com/v1"
