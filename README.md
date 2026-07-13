@@ -365,7 +365,7 @@ docker compose restart whatsapp
 
 **Pesan tidak terkirim:**
 - Pastikan `WHATSAPP_ADMIN_PHONE` benar di `.env`
-- Format yang valid: `+628979755323` atau `628979755323`
+- Format yang valid: `+62987654321` atau `62987654321`
 - **PENTING**: Nomor pengirim (yang scan QR) harus BERBEDA dari `WHATSAPP_ADMIN_PHONE`
 - WhatsApp tidak bisa kirim pesan ke diri sendiri!
 - Debug: `uv run python scripts/debug_whatsapp.py`
@@ -378,7 +378,7 @@ Sistem mendukung 2 mode notifikasi:
 **Mode 1: Private Chat (Default)**
 - Notifikasi dikirim ke nomor WhatsApp personal
 - Set `WHATSAPP_NOTIFICATION_MODE=private` di `.env`
-- Gunakan `WHATSAPP_ADMIN_PHONE=628979755323`
+- Gunakan `WHATSAPP_ADMIN_PHONE=62987654321`
 
 **Mode 2: Group Chat**
 - Notifikasi dikirim ke group WhatsApp
@@ -429,7 +429,7 @@ WhatsApp Business API memerlukan webhook untuk menerima status updates (sent, de
 | `INSTAGRAM_LIMIT` | Jumlah post yang di-fetch per sync. |
 | `USE_FAKE_INSTAGRAM` | Set `true` hanya untuk local demo tanpa credential. Default `false`. |
 | `WHATSAPP_SERVICE_URL` | URL Baileys WhatsApp service. Default `http://localhost:3001`. Di Docker: `http://whatsapp:3001`. |
-| `WHATSAPP_ADMIN_PHONE` | Nomor WhatsApp admin penerima. Format: `+628979755323` atau `628979755323`. |
+| `WHATSAPP_ADMIN_PHONE` | Nomor WhatsApp admin penerima. Format: `+62987654321` atau `62987654321`. |
 | `TELEGRAM_BOT_TOKEN` | Token Telegram Bot. Dipakai sebagai fallback jika WhatsApp gagal/tidak dikonfigurasi. |
 | `TELEGRAM_ADMIN_CHAT_ID` | Chat ID admin penerima notifikasi fallback Telegram. |
 | `OPENAI_API_KEY` | API key LLM provider. |
@@ -666,7 +666,7 @@ Solusi untuk development:
 1. Buka [Meta for Developers](https://developers.facebook.com/)
 2. Pilih app → WhatsApp → API Setup
 3. Di bagian "Send and receive messages", klik "Add phone number"
-4. Masukkan nomor tujuan (e.g., `+628979755323`) dan verify via OTP
+4. Masukkan nomor tujuan (e.g., `+62987654321`) dan verify via OTP
 
 Untuk production: Business account perlu verified oleh Meta untuk mengirim ke nomor arbitrary.
 
